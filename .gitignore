@@ -102,3 +102,8 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+deploy/model
+deploy/bin
+deploy/lib
+graph_tunner.log
