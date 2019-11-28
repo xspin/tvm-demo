@@ -21,10 +21,18 @@ import os
 from tvm import relay
 import numpy as np
 
-def test():
+def prepare_test_libs(base_path):
+    n = tvm.var("n")
+    A = tvm.placeholder((n,), name='A')
+    B = tvm.compute(A.shape, lambda *i: A(*i) + 1.0, name='B')
+    s = tvm.create_schedule(B.op)
+    print(B)
+    # Compile library as dynamic library
+    fadd_dylib = tvm.build(s, [A, B], "llvm", name="addone")
+    dylib_path = os.path.join(base_path, "test_addone.so")
+    # fadd_dylib.export_library(dylib_path)
+def test_custom_bcast_geomean():
     N = 5
-    x = tvm.nd.array(np.arange(N, dtype=np.float32))
-    y = tvm.nd.array(np.zeros(N, dtype=np.float32))
     x = relay.var('a', shape=(N, 1))
     y = relay.var('b', shape=(N, 1))
     z = relay.op.custom_bcast_geomean(x, y)
@@ -50,19 +58,26 @@ def test():
     out = m.get_output(0)
     print(out)
 
-def prepare_test_libs(base_path):
-    n = tvm.var("n")
-    A = tvm.placeholder((n,), name='A')
-    B = tvm.compute(A.shape, lambda *i: A(*i) + 1.0, name='B')
-    s = tvm.create_schedule(B.op)
-    print(B)
-    # Compile library as dynamic library
-    fadd_dylib = tvm.build(s, [A, B], "llvm", name="addone")
-    dylib_path = os.path.join(base_path, "test_addone.so")
-    # fadd_dylib.export_library(dylib_path)
+def test_custom_elemwise_plus():
+    N = 5
+    x = relay.var('a', shape=(1, N))
+    z = relay.op.custom_elemwise_plus(x, 1)
+    # z = relay.op.clip(x, 0, 1)
+    mod = relay.module.Module.from_expr(z)
+    graph, lib, params = relay.build(mod, target='llvm')
+
+    ctx = tvm.cpu()
+    e = relay.create_executor(mod=mod, ctx=ctx)
+    m = tvm.contrib.graph_runtime.create(graph, lib, ctx)
+    # m.load_params(**params)
+    a = tvm.nd.array(np.array([0,1,0.5,3,-2]).astype(np.float32))
+    m.run(**{'a': a})
+    out = m.get_output(0)
+    print(out)
 
 if __name__ == "__main__":
     lib_dir = 'lib'
     if not os.path.exists(lib_dir): os.mkdir(lib_dir)
     # prepare_test_libs(lib_dir)
-    test()
+    test_custom_elemwise_plus()
+    # test_custom_bcast_geomean()

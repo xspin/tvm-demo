@@ -40,7 +40,108 @@ register_shape_func("custom_bcast_geomean", False, broadcast_shape_func)
 ```
 
 
-### Python 中调用自定义 OP
+
+## Elemwise 类型算子（带参数）
+
+`tvm/topi/include/topi/elemwise.h` 
+```c++
+inline Tensor custom_elemwise_plus(const Tensor& x,
+                       const Expr& a,
+                       std::string name = "T_custom_elemwise_plus",
+                       std::string tag = kElementWise) {
+  return compute(x->shape, [&](const Array<Var>& i) {
+    return x(i) + a;
+  }, name, tag);
+}
+```
+
+`tvm/topi/src/topi.cc` 
+```c++
+TVM_REGISTER_GLOBAL("topi.custom_elemwise_plus")
+.set_body([](TVMArgs args, TVMRetValue *rv) {
+  *rv = custom_elemwise_plus(args[0], args[1]);
+  })
+```
+`tvm/include/tvm/relay/attrs/transform.h`
+```c++
+struct CustomPlusAttrs: public tvm::AttrsNode<CustomPlusAttrs> {
+  double a;
+
+  TVM_DECLARE_ATTRS(CustomPlusAttrs, "relay.attrs.CustomPlusAttrs") {
+    TVM_ATTR_FIELD(a)
+      .describe("The add value.");
+  }
+};
+```
+
+`tvm/src/relay/op/tensor/unary.cc`
+```c++
+TVM_REGISTER_NODE_TYPE(CustomPlusAttrs);
+
+TVM_REGISTER_API("relay.op._make.custom_elemwise_plus")
+.set_body_typed<Expr(Expr, double)>([](Expr x, double a) {
+    auto attrs = make_node<CustomPlusAttrs>();
+    attrs->a = a;
+    static const Op& op = Op::Get("custom_elemwise_plus");
+  return CallNode::make(op, {x}, Attrs(attrs), {});
+});
+
+RELAY_REGISTER_OP("custom_elemwise_plus")
+.describe(R"code(Returns the addition of input array, computed element-wise.
+.. math::
+   x + a
+)code" TVM_ADD_FILELINE)
+.set_num_inputs(1)
+.add_argument("data", "Tensor", "The input tensor.")
+.add_type_rel("Identity", IdentityRel)
+.set_attr<TOpPattern>("TOpPattern", kElemWise)
+.set_attr<TOpIsStateful>("TOpIsStateful", false)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
+.set_attrs_type<CustomPlusAttrs>()
+.set_support_level(3);
+```
+
+`tvm/topi/python/topi/math.py`
+```python
+@tvm.tag_scope(tag=tag.ELEMWISE)
+def custom_elemwise_plus(x, a):
+    def _compute(*indices):
+        value = x(*indices)
+        const_a = tvm.const(a, value.dtype)
+        return value+const_a
+    return tvm.compute(x.shape, _compute)
+```
+
+`tvm/python/tvm/relay/op/tensor.py`
+```python
+def custom_elemwise_plus(x, a):
+    """Plus the elements in `x` with `a`.
+
+    Parameters
+    ----------
+    x : relay.Expr
+        The input tensor.
+    a : float
+        The add value.
+
+    Returns
+    -------
+    result : relay.Expr
+    """
+    return _make.custom_elemwise_plus(x, a)
+```
+
+`tvm/python/tvm/relay/op/_tensor.py`
+```python
+@register_compute("custom_elemwise_plus")
+def custom_elemwise_plus_compute(attrs, inputs, output_type, target):
+    assert len(inputs) == 1
+    return [topi.custom_elemwise_plus(inputs[0], attrs.a)]
+
+register_schedule("custom_elemwise_plus", schedule_elemwise)
+```
+
+## Python 中调用自定义 OP
 
 ```python
 import tvm
@@ -71,29 +172,3 @@ m.run(**{'a': a, 'b': b})
 out = m.get_output(0)
 print(out)
 ```
-
-
-## Elemwise 类型算子
-
-`tvm/topi/include/topi/elemwise.h` 
-```c++
-inline Tensor custom_elemwise_plus(const Tensor& x,
-                       const Expr& a,
-                       std::string name = "T_custom_plus",
-                       std::string tag = kElementWise) {
-  return compute(x->shape, [&](const Array<Var>& i) {
-    return x(i) + a;
-  }, name, tag);
-}
-```
-
-`tvm/topi/src/topi.cc` 
-```c++
-TVM_REGISTER_GLOBAL("topi.custom_elemwise_plus")
-.set_body([](TVMArgs args, TVMRetValue *rv) {
-  *rv = cast(args[0], args[1]);
-  })
-```
-
-`tvm/src/relay/op/tensor/unary.cc`
-
