@@ -126,3 +126,7 @@ nvcc not found
 ```shell
 $ export PATH=/path/to/cuda/bin:$PATH    # e.g. /usr/local/cuda/bin
 ```
+
+
+## 添加自定义算子
+[add_op_demo](add_op_demo/Readme.md)
