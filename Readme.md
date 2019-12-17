@@ -128,5 +128,8 @@ $ export PATH=/path/to/cuda/bin:$PATH    # e.g. /usr/local/cuda/bin
 ```
 
 
-## 添加自定义算子
+## 添加自定义算子和网络层
+
 [custom_op_demo](custom_op_demo/Readme.md)
+
+[custom_layer_demo](custom_layer_demo/Readme.md)

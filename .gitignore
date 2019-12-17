@@ -107,3 +107,5 @@ deploy/model
 deploy/bin
 deploy/lib
 graph_tunner.log
+tfmodel
+.pkl*
